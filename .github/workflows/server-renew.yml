@@ -13,19 +13,27 @@ jobs:
 
     steps:
       # ==============================
-      # 拉代码
+      # 拉取代码
       # ==============================
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # ==============================
-      # Python环境
+      # Python环境与智能缓存
       # ==============================
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          # 使用 workflow 文件本身的 hash 作为 key，如果 yml 不改，缓存就一直有效
+          key: ${{ runner.os }}-pip-${{ hashFiles('.github/workflows/*.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       # ==============================
       # 1. 安装基础系统依赖
@@ -66,9 +74,16 @@ jobs:
           fi
 
       # ==============================
-      # 4. 准备 sing-box 环境 (仅下载和验证节点，不启动！)
+      # 4. 准备 sing-box 环境 (带缓存验证)
       # ==============================
-      - name: 🛡️ Prepare sing-box and Verify Nodes
+      - name: Cache sing-box
+        id: cache-singbox
+        uses: actions/cache@v3
+        with:
+          path: ./sing-box
+          key: ${{ runner.os }}-singbox-1.11.0
+
+      - name: 🛡️ Download and Verify sing-box
         env:
           PROXY_URL: ${{ secrets.PROXY_URL }}
         run: |
@@ -76,12 +91,18 @@ jobs:
             echo "⚠️ 未设置 PROXY_URL，将尝试直连。"
             exit 0
           fi
-          SINGBOX_VER="1.11.0"
-          echo "📥 正在下载 sing-box v$SINGBOX_VER..."
-          wget -q "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
-          tar -xzf "sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
-          mv "sing-box-${SINGBOX_VER}-linux-amd64/sing-box" ./sing-box
-          chmod +x ./sing-box
+          
+          # 只有在没有命中缓存时才去下载
+          if [ "${{ steps.cache-singbox.outputs.cache-hit }}" != "true" ]; then
+            SINGBOX_VER="1.11.0"
+            echo "📥 正在下载 sing-box v$SINGBOX_VER..."
+            wget -q "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
+            tar -xzf "sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
+            mv "sing-box-${SINGBOX_VER}-linux-amd64/sing-box" ./sing-box
+            chmod +x ./sing-box
+          else
+            echo "⚡ 命中 sing-box 缓存，跳过下载！"
+          fi
           
           echo "⚙️ 验证 PROXY_URL 解析..."
           # 仅调用脚本打印节点列表，验证格式是否正确，不生成 config.json，也不启动 sing-box
@@ -96,12 +117,13 @@ jobs:
           PROXY_URL: ${{ secrets.PROXY_URL }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          HIDE_IP: ${{ vars.HIDE_IP }} # 从 GitHub Variables 读取隐藏 IP 设置
         run: |
           echo "🔥 启动智能续期主控脚本..."
           python main.py
 
       # ==============================
-      # 6. 调试截图上传
+      # 6. 调试截图上传 (默认注释，需要时解开)
       # ==============================
       #- name: Upload Debug Screenshots
         #uses: actions/upload-artifact@v4
@@ -120,7 +142,7 @@ jobs:
           echo "======================================"
           echo "🎯 Workflow 执行完成"
           echo "======================================"
-          echo "✅ Python 依赖: 已安装"
+          echo "✅ Python 依赖: 已安装/缓存读取"
           echo "✅ sing-box: 已准备就绪"
           echo "✅ 续期脚本: 已运行 (含节点轮询)"
           echo "📸 截图: 已保存至 Artifacts"
