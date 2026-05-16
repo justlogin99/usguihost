@@ -1,4 +1,4 @@
-name: Auto Renew Server (Node-Rotation-Retry)
+name: Auto Renew Server (Xray-Node-Rotation-Retry)
 
 on:
   workflow_dispatch:
@@ -30,7 +30,6 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.cache/pip
-          # 使用 workflow 文件本身的 hash 作为 key，如果 yml 不改，缓存就一直有效
           key: ${{ runner.os }}-pip-${{ hashFiles('.github/workflows/*.yml') }}
           restore-keys: |
             ${{ runner.os }}-pip-
@@ -41,7 +40,7 @@ jobs:
       - name: Install Base System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb ffmpeg unzip curl net-tools
+          sudo apt-get install -y xvfb ffmpeg unzip curl wget net-tools
 
       # ==============================
       # 2. Chrome 浏览器智能缓存
@@ -74,56 +73,64 @@ jobs:
           fi
 
       # ==============================
-      # 4. 准备 sing-box 环境 (带缓存验证)
+      # 4. 准备 Xray 环境
       # ==============================
-      - name: Cache sing-box
-        id: cache-singbox
+      - name: Cache Xray
+        id: cache-xray
         uses: actions/cache@v3
         with:
-          path: ./sing-box
-          key: ${{ runner.os }}-singbox-1.11.0
+          path: |
+            ./xray
+            ./geoip.dat
+            ./geosite.dat
+          key: ${{ runner.os }}-xray-25.4.30
 
-      - name: 🛡️ Download and Verify sing-box
+      - name: 🛡️ Download and Verify Xray
         env:
           PROXY_URL: ${{ secrets.PROXY_URL }}
         run: |
           if [ -z "$PROXY_URL" ]; then
-            echo "⚠️ 未设置 PROXY_URL，将尝试直连。"
+            echo "⚠️ 未设置 PROXY_URL，将尝试直连或后续脚本自行处理。"
             exit 0
           fi
-          
-          # 只有在没有命中缓存时才去下载
-          if [ "${{ steps.cache-singbox.outputs.cache-hit }}" != "true" ]; then
-            SINGBOX_VER="1.11.0"
-            echo "📥 正在下载 sing-box v$SINGBOX_VER..."
-            wget -q "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
-            tar -xzf "sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
-            mv "sing-box-${SINGBOX_VER}-linux-amd64/sing-box" ./sing-box
-            chmod +x ./sing-box
+
+          if [ "${{ steps.cache-xray.outputs.cache-hit }}" != "true" ]; then
+            XRAY_VER="25.4.30"
+            echo "📥 正在下载 Xray-core v${XRAY_VER}..."
+
+            wget -q "https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VER}/Xray-linux-64.zip" -O xray.zip
+
+            unzip -o xray.zip
+            chmod +x ./xray
+
+            rm -f xray.zip
           else
-            echo "⚡ 命中 sing-box 缓存，跳过下载！"
+            echo "⚡ 命中 Xray 缓存，跳过下载！"
+            chmod +x ./xray || true
           fi
-          
+
+          echo "🔎 Xray 版本信息："
+          ./xray version || true
+
           echo "⚙️ 验证 PROXY_URL 解析..."
-          # 仅调用脚本打印节点列表，验证格式是否正确，不生成 config.json，也不启动 sing-box
           python proxy_handler.py
 
       # ==============================
-      # 5. 运行核心续期脚本 (自带连通性预检与循环换IP逻辑)
+      # 5. 运行核心续期脚本
       # ==============================
-      - name: 🚀 Run Renew Script with IP Rotation
+      - name: 🚀 Run Renew Script with Xray IP Rotation
         env:
           RENEW_URL: ${{ secrets.RENEW_URL }}
           PROXY_URL: ${{ secrets.PROXY_URL }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-          HIDE_IP: ${{ vars.HIDE_IP }} # 从 GitHub Variables 读取隐藏 IP 设置
+          HIDE_IP: ${{ vars.HIDE_IP }}
         run: |
           echo "🔥 启动智能续期主控脚本..."
           python main.py
 
       # ==============================
-      # 6. 调试截图上传 (默认注释，需要时解开)
+      # 6. 调试截图上传
       # ==============================
       #- name: Upload Debug Screenshots
         #uses: actions/upload-artifact@v4
@@ -143,7 +150,7 @@ jobs:
           echo "🎯 Workflow 执行完成"
           echo "======================================"
           echo "✅ Python 依赖: 已安装/缓存读取"
-          echo "✅ sing-box: 已准备就绪"
-          echo "✅ 续期脚本: 已运行 (含节点轮询)"
-          echo "📸 截图: 已保存至 Artifacts"
+          echo "✅ Xray: 已准备就绪"
+          echo "✅ 代理节点: 已按索引生成 Xray config.json"
+          echo "✅ 主脚本: 已运行"
           echo "======================================"
