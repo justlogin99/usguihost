@@ -349,7 +349,12 @@ def check_proxy_connectivity(proxy_url, max_retries=2, timeout=5):
     for attempt in range(max_retries):
         try:
             resp = requests.get(test_url, proxies=proxies, timeout=timeout)
-            if resp.status_code == 200: return True, resp.text.strip()
+            if resp.status_code == 200:
+                raw_ip = resp.text.strip()
+                # 将 IP 隐藏：例如 220.93.154.85 变成 220.93.154.* 
+                # (api.ipify.org 仅返回IP，若带有端口也会将最后一段及端口替换成星号)
+                masked_ip = re.sub(r'(\d+\.\d+\.\d+)\.\d+(:\d+)?', r'\1.*', raw_ip)
+                return True, masked_ip
         except requests.exceptions.ProxyError:
             return False, "Proxy Refused"
         except: pass
