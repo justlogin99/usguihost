@@ -322,24 +322,56 @@ def renew_host2play(url, proxy_url=None, user_data_dir=None):
 # ==============================================================================
 # 主控逻辑：自适应时间分片 + 熔断机制
 # ==============================================================================
-def restart_singbox():
-    print("♻️ 正在重启 sing-box...")
+def restart_xray():
+    print("♻️ 正在重启 Xray...")
     try:
-        subprocess.run(['pkill', '-f', 'sing-box run'], stderr=subprocess.DEVNULL)
+        # 关闭旧 Xray 进程
+        subprocess.run(['pkill', '-f', 'xray.*run'], stderr=subprocess.DEVNULL)
         time.sleep(2)
-        subprocess.Popen(['./sing-box', 'run', '-c', 'config.json'], stdout=open('singbox.log', 'a'), stderr=subprocess.STDOUT)
-        time.sleep(5)
-        check_process = subprocess.run(['pgrep', '-f', 'sing-box run'], stdout=subprocess.DEVNULL)
-        if check_process.returncode != 0:
-            print("❌ sing-box 启动失败！")
-            try:
-                with open("singbox.log", "r") as f: print(f.read()[-500:])
-            except: pass
+
+        # 启动前测试 config.json，避免配置错误时直接卡住
+        test_result = subprocess.run(
+            ['./xray', 'run', '-test', '-config', 'config.json'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=15
+        )
+
+        if test_result.returncode != 0:
+            print("❌ Xray 配置测试失败！")
+            print(test_result.stdout[-1500:])
             return False
-        print("✅ sing-box 重启成功")
+
+        # 启动 Xray
+        subprocess.Popen(
+            ['./xray', 'run', '-config', 'config.json'],
+            stdout=open('xray.log', 'a'),
+            stderr=subprocess.STDOUT
+        )
+
+        time.sleep(5)
+
+        # 检查 Xray 是否成功运行
+        check_process = subprocess.run(
+            ['pgrep', '-f', 'xray.*run'],
+            stdout=subprocess.DEVNULL
+        )
+
+        if check_process.returncode != 0:
+            print("❌ Xray 启动失败！")
+            try:
+                with open("xray.log", "r", encoding="utf-8", errors="ignore") as f:
+                    print(f.read()[-1500:])
+            except Exception:
+                pass
+            return False
+
+        print("✅ Xray 重启成功")
         return True
+
     except Exception as e:
-        print(f"❌ 重启 sing-box 异常: {e}")
+        print(f"❌ 重启 Xray 异常: {e}")
         return False
 
 def check_proxy_connectivity(proxy_url, max_retries=2, timeout=15):
@@ -422,8 +454,8 @@ if __name__ == "__main__":
         gen_result = subprocess.run(['python', 'proxy_handler.py', '--index', str(node_idx)], capture_output=True, text=True)
         if gen_result.returncode != 0: continue
 
-        if not restart_singbox():
-            final_msg = f"💥 致命错误：节点 {node_idx} 导致 sing-box 启动失败，流程熔断。"
+        if not restart_xray():
+            final_msg = f"💥 致命错误：节点 {node_idx} 导致 xray 启动失败，流程熔断。"
             break
 
         is_alive, ip_info = check_proxy_connectivity(local_proxy_url)
