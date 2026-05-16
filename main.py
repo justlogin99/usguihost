@@ -342,7 +342,7 @@ def restart_singbox():
         print(f"❌ 重启 sing-box 异常: {e}")
         return False
 
-def check_proxy_connectivity(proxy_url, max_retries=2, timeout=5):
+def check_proxy_connectivity(proxy_url, max_retries=2, timeout=15):
     print(f"🔍 正在测试代理连通性 ({max_retries}次重试)...")
     proxies = {"http": proxy_url, "https": proxy_url}
     test_url = "https://api.ipify.org"
