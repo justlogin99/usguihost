@@ -30,7 +30,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('.github/workflows/*.yml') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
@@ -66,12 +66,16 @@ jobs:
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          else
-            #pip install requests>=2.28.0 DrissionPage>=4.0.0 pydub>=0.25.1 SpeechRecognition>=3.10.0 xvfbwrapper>=0.2.9
-            pip install requests>=2.28.0 DrissionPage>=4.0.0 DataRecorder pydub>=0.25.1 SpeechRecognition>=3.10.0 xvfbwrapper>=0.2.9
-          fi
+          pip install \
+            DrissionPage \
+            DataRecorder \
+            DownloadKit \
+            requests>=2.28.0 \
+            pydub>=0.25.1 \
+            SpeechRecognition>=3.10.0 \
+            xvfbwrapper>=0.2.9
+          echo "✅ 依赖安装完成"
+          pip check || true
 
       # ==============================
       # 4. 准备 Xray 环境
