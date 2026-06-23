@@ -17,11 +17,26 @@ except ImportError:
     pass
 
 # ==============================================================================
-# 配置区域
+# 配置区域 - 从环境变量读取敏感信息
 # ==============================================================================
-RENEW_URLS = [
-    "https://host2play.gratis/server/renew?i=6666666-6666-6666-6666-66666666666",
-    # 添加更多链接
+
+def get_renew_urls():
+    """从环境变量获取续期URL列表，支持多个URL（用换行符分隔）"""
+    urls_str = os.environ.get("RENEW_URLS", "")
+    if not urls_str:
+        return []
+    
+    # 支持换行符或逗号分隔
+    urls = []
+    for url in urls_str.replace(",", "\n").split("\n"):
+        url = url.strip()
+        if url and url.startswith("http"):
+            urls.append(url)
+    return urls
+
+# 从环境变量获取URL列表，如果为空则使用默认值（仅用于本地测试）
+RENEW_URLS = get_renew_urls() or [
+    "https://host2play.gratis/server/renew?i=6666666-6666-6666-6666-66666666666"
 ]
 
 MAX_CAPTCHA = 3
@@ -466,7 +481,7 @@ def solve_recaptcha(page):
     raise RuntimeError("验证码达到最大尝试次数")
 
 # ==============================================================================
-# 单个 URL 续期流程（去掉 IP 预检，直接尝试 + 封锁换 IP）
+# 单个 URL 续期流程
 # ==============================================================================
 def renew_single_url(url):
     success = False
@@ -541,7 +556,7 @@ def renew_single_url(url):
                     consent_btn.click()
                     time.sleep(3)
 
-                # 关键：积累真实的鼠标轨迹和滚动数据（源版有，新版删了）
+                # 关键：积累真实的鼠标轨迹和滚动数据
                 for _ in range(3):
                     scroll_y = random.randint(200, 600)
                     page.scroll.down(scroll_y)
@@ -663,8 +678,9 @@ def renew_single_url(url):
 def main():
     tg_token = os.getenv("TG_BOT_TOKEN")
     tg_chat_id = os.getenv("TG_CHAT_ID")
+    
     if not RENEW_URLS:
-        log("请在 RENEW_URLS 列表中添加续期链接", "ERROR")
+        log("未配置 RENEW_URLS 环境变量，请在 GitHub Secrets 中添加续期链接", "ERROR")
         sys.exit(1)
 
     total_success = 0
