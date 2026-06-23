@@ -40,7 +40,7 @@ RENEW_URLS = get_renew_urls() or [
 ]
 
 MAX_CAPTCHA = 3
-MAX_RENEW_RETRIES_PER_URL = 50
+MAX_RENEW_RETRIES_PER_URL = 20
 
 # ==============================================================================
 # 自定义异常
